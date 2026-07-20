@@ -61,5 +61,6 @@
 - done: Додано 3 нових юніт-тести в `tests/test_analysis.py`, повний тестовий пакет успішно пройдено (73 passed).
 - done: Дозволено кроп тіла (body-aware crop) для зображень далекого ракурсу (`scale_bin == "far"`), якщо знайдено контури тіла, замість постійного збереження повного кадру.
 - done: Додано юніт-тест для перевірки `body_crop_far` стратегії, всі 74 тести успішно пройшли.
-- done: Завантажено опціональну модель MobileCLIP ONNX з Hugging Face (`memojo/mobileclip-s2-onnx`) та успішно валідовано через діагностику `doctor`.
+- done: Завантажено та верифіковано опціональну сумісну модель MobileCLIP-S0 ONNX з репозиторію `plhery/mobileclip2-onnx` на Hugging Face (попередня S2 модель падала в OpenCV DNN на кроці shape inference).
+
 
