@@ -244,3 +244,18 @@ def test_tighter_crop_skips_body_analysis_and_marks_identity_only(tmp_path: Path
     assert len(rows) == 1
     assert rows[0]["strategy"].startswith("identity_tight")
     assert "identity_only" in str(rows[0]["crop_reasons"])
+
+
+def test_body_crop_far_view_if_body_found() -> None:
+    body = FakeBody()
+    body.bbox = (200, 100, 800, 900)
+    decision = body_aware_crop(
+        (1000, 1000),
+        (450, 150, 550, 250),
+        "far",
+        None,
+        body,
+    )
+    assert decision.strategy == "body_crop_far"
+    assert decision.safety == "safe"
+    assert decision.box != (0, 0, 1000, 1000)

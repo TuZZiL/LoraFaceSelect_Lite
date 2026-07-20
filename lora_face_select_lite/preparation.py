@@ -351,6 +351,25 @@ def body_aware_crop(
     width, height = image_size
     original = (0, 0, width, height)
     if scale_bin == "far":
+        if body is not None and hasattr(body, "bbox") and body.confidence >= min_pose_confidence:
+            bx1, by1, bx2, by2 = body.bbox
+            bw = bx2 - bx1
+            bh = by2 - by1
+            cx = (bx1 + bx2) / 2
+            cy = (by1 + by2) / 2
+            padding_x = max(16.0, bw * 0.15)
+            padding_y = max(16.0, bh * 0.10)
+            desired_h = bh + 2.0 * padding_y
+            desired_w = desired_h * 0.75
+            if desired_w < (bw + 2.0 * padding_x):
+                desired_w = bw + 2.0 * padding_x
+                desired_h = desired_w / 0.75
+            candidate = _centered_box(width, height, cx, cy, desired_w, desired_h)
+            risks = _crop_risks(candidate, image_size, semantic_box, body)
+            if not risks:
+                saved_area = 1.0 - ((candidate[2] - candidate[0]) * (candidate[3] - candidate[1])) / max(1, width * height)
+                if saved_area >= 0.08:
+                    return CropDecision(candidate, "body_crop_far", "safe", ())
         return CropDecision(original, "context_original", "safe_original", ("far_view_preserved",))
     if body is None:
         return CropDecision(original, "original_fallback", "warning", ("body_not_found",))
