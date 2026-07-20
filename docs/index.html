@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lora Face Select Lite - CPU-First Face LoRA Dataset Selector</title>
+  <meta name="description" content="CPU-first smart face image & video frame selector with body-aware safe cropping for AI Face LoRA datasets. Krea 2 aspect ratio bucket ready.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #0a0d14;
+      --bg-surface: #121824;
+      --bg-card: rgba(22, 30, 46, 0.7);
+      --bg-card-hover: rgba(30, 41, 62, 0.85);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(99, 102, 241, 0.3);
+      --accent-primary: #6366f1;
+      --accent-secondary: #a855f7;
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --glow-purple: rgba(168, 85, 247, 0.15);
+      --glow-indigo: rgba(99, 102, 241, 0.2);
+      --font-heading: 'Outfit', sans-serif;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --font-code: 'Fira Code', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: var(--font-body);
+      line-height: 1.6;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
+        radial-gradient(circle at 85% 60%, rgba(168, 85, 247, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 50% 90%, rgba(6, 182, 212, 0.08) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    /* Glass Header / Navbar */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+      background: rgba(10, 13, 20, 0.75);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .navbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 72px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.2rem;
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+    }
+
+    .brand-title {
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 1.25rem;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-tag {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: rgba(99, 102, 241, 0.2);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      font-weight: 600;
+      margin-left: 0.25rem;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.75rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--accent-cyan);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(168, 85, 247, 0.45);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 5rem 0 3.5rem;
+      text-align: center;
+      position: relative;
+    }
+
+    .hero-badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+    }
+
+    .badge-emerald {
+      background: rgba(16, 185, 129, 0.1);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+
+    .badge-indigo {
+      background: rgba(99, 102, 241, 0.1);
+      border-color: rgba(99, 102, 241, 0.3);
+      color: #a5b4fc;
+    }
+
+    .hero-title {
+      font-family: var(--font-heading);
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.25rem;
+      background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 70%, #e879f9 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      max-width: 760px;
+      margin: 0 auto 2.5rem;
+      font-weight: 400;
+    }
+
+    .hero-cta {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 3rem;
+    }
+
+    /* Terminal Preview Box */
+    .terminal-card {
+      background: #0d1117;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      max-width: 900px;
+      margin: 0 auto;
+      text-align: left;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 40px var(--glow-indigo);
+      overflow: hidden;
+    }
+
+    .terminal-header {
+      background: #161b22;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .terminal-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .dot-red { background: #ff5f56; }
+    .dot-yellow { background: #ffbd2e; }
+    .dot-green { background: #27c93f; }
+
+    .terminal-title {
+      font-family: var(--font-code);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    .terminal-body {
+      padding: 1.25rem;
+      font-family: var(--font-code);
+      font-size: 0.88rem;
+      color: #c9d1d9;
+      line-height: 1.7;
+      overflow-x: auto;
+    }
+
+    .cmd-prompt { color: #58a6ff; }
+    .cmd-keyword { color: #ff7b72; }
+    .cmd-path { color: #a5d6ff; }
+    .cmd-flag { color: #79c0ff; }
+    .cmd-comment { color: #8b949e; font-style: italic; }
+    .cmd-success { color: #7ee787; }
+
+    /* Section Header */
+    .section-header {
+      text-align: center;
+      margin-bottom: 3.5rem;
+    }
+
+    .section-title {
+      font-family: var(--font-heading);
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.75rem;
+    }
+
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+
+    /* Features Grid */
+    .features-section {
+      padding: 5rem 0;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.75rem;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(10px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--border-accent), transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .card:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(99, 102, 241, 0.4);
+      transform: translateY(-4px);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+    }
+
+    .card:hover::before {
+      opacity: 1;
+    }
+
+    .card-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+      color: var(--accent-primary);
+    }
+
+    .card-title {
+      font-family: var(--font-heading);
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 0.6rem;
+      color: #fff;
+    }
+
+    .card-text {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.65;
+    }
+
+    /* Interactive Pipeline Flow */
+    .pipeline-section {
+      padding: 5rem 0;
+      background: rgba(18, 24, 36, 0.4);
+      border-top: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .pipeline-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .step-item {
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 1.5rem;
+      align-items: center;
+      transition: all 0.25s ease;
+    }
+
+    .step-item:hover {
+      border-color: rgba(6, 182, 212, 0.4);
+      background: rgba(22, 30, 46, 0.95);
+    }
+
+    .step-num {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2));
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: #a5b4fc;
+    }
+
+    .step-content h4 {
+      font-family: var(--font-heading);
+      font-size: 1.15rem;
+      color: #fff;
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .step-content p {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+    }
+
+    /* Krea Aspect Ratio Calculator Widget */
+    .calculator-section {
+      padding: 5rem 0;
+    }
+
+    .calc-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      padding: 2.5rem;
+      max-width: 900px;
+      margin: 0 auto;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .calc-controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .input-group select, .input-group input {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      background: rgba(10, 13, 20, 0.8);
+      border: 1px solid var(--border-color);
+      color: #fff;
+      font-family: var(--font-body);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .input-group select:focus, .input-group input:focus {
+      border-color: var(--accent-primary);
+    }
+
+    .calc-result {
+      background: rgba(10, 13, 20, 0.7);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: 12px;
+      padding: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .calc-spec {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .calc-spec-val {
+      font-family: var(--font-code);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    .calc-spec-lbl {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .aspect-visualizer {
+      width: 120px;
+      height: 120px;
+      border: 2px dashed var(--accent-secondary);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-code);
+      font-size: 0.75rem;
+      color: #e879f9;
+      background: rgba(168, 85, 247, 0.08);
+      transition: all 0.3s ease;
+    }
+
+    /* Artifact Table Showcase */
+    .artifact-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1.5rem;
+      font-size: 0.92rem;
+    }
+
+    .artifact-table th, .artifact-table td {
+      padding: 1rem 1.25rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .artifact-table th {
+      background: rgba(255, 255, 255, 0.03);
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .artifact-table td {
+      color: var(--text-muted);
+    }
+
+    .file-name {
+      font-family: var(--font-code);
+      color: #818cf8;
+      font-weight: 500;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 3rem 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      color: var(--accent-primary);
+    }
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .hero-cta { flex-direction: column; }
+      .calc-result { flex-direction: column; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header / Navigation -->
+  <header>
+    <div class="container navbar">
+      <a href="#" class="brand">
+        <div class="brand-icon">L</div>
+        <div>
+          <span class="brand-title">Lora Face Select</span>
+          <span class="brand-tag">LITE</span>
+        </div>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#pipeline">Pipeline</a></li>
+        <li><a href="#calculator">Krea Buckets</a></li>
+        <li><a href="#quickstart">Quick Start</a></li>
+        <li><a href="#artifacts">Artifacts</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a href="https://github.com" target="_blank" class="btn btn-secondary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+        <a href="#quickstart" class="btn btn-primary">Get Started</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badges">
+        <span class="badge badge-emerald">⚡ 100% CPU-First & Local</span>
+        <span class="badge badge-indigo">🎯 Smart Krea 2 Bucket Fitting</span>
+        <span class="badge">🛡️ NudeNet & Joint Safety</span>
+        <span class="badge">🎬 Video Sampling Ready</span>
+      </div>
+      <h1 class="hero-title">Automated Dataset Curation<br>For Face LoRA Training</h1>
+      <p class="hero-subtitle">
+        Filter high-quality reference faces from thousands of photos & video clips.
+        Generate body-aware conservative crops aligned to exact training aspect ratio buckets with full offline privacy.
+      </p>
+      <div class="hero-cta">
+        <a href="#quickstart" class="btn btn-primary" style="padding: 0.8rem 1.8rem; font-size: 1rem;">
+          🚀 Quick Start Guide
+        </a>
+        <a href="#calculator" class="btn btn-secondary" style="padding: 0.8rem 1.8rem; font-size: 1rem;">
+          📐 Test Krea Bucket Crop
+        </a>
+      </div>
+
+      <!-- Terminal Preview Box -->
+      <div class="terminal-card">
+        <div class="terminal-header">
+          <div class="terminal-dots">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yellow"></div>
+            <div class="dot dot-green"></div>
+          </div>
+          <div class="terminal-title">lora-face-select-lite — PowerShell</div>
+          <div></div>
+        </div>
+        <div class="terminal-body">
+          <div><span class="cmd-prompt">PS F:\AI_project&gt;</span> <span class="cmd-keyword">python</span> -m lora_face_select_lite select <span class="cmd-path">.\raw_dataset</span> <span class="cmd-flag">--references</span> <span class="cmd-path">.\ref.jpg</span> <span class="cmd-flag">--count</span> 20 <span class="cmd-flag">--output</span> <span class="cmd-path">.\result</span></div>
+          <div class="cmd-comment">[1/4] Loading CPU models: YuNet (Detection), SFace (Identity), BiSeNet (Parsing), MediaPipe (Pose)...</div>
+          <div class="cmd-comment">[2/4] Sampling local video frames (0.5 fps, checkpoint: video_progress.json)...</div>
+          <div class="cmd-comment">[3/4] Evaluating similarity, pitch/yaw, quality score & joint safety...</div>
+          <div class="cmd-comment">[4/4] Generating conservative crops: 512x768 (70%), 768x1024 (30%) — Zero upscale.</div>
+          <div class="cmd-success">✔ Success: 20 target crops ready in .\result\prepared\ | Review GUI report: .\result\review.html</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="features-section">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Built for Production LoRA Workflows</h2>
+        <p class="section-desc">Eliminate manual cropping, bad angles, truncated limbs, and accidental background clutter.</p>
+      </div>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <h3 class="card-title">CPU-First Architecture</h3>
+          <p class="card-text">
+            Runs efficiently on standard desktop/laptop CPUs using OpenCV DNN and ONNX Runtime CPU. Zero VRAM requirement, allowing your GPU to focus 100% on LoRA training.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🎯</div>
+          <h3 class="card-title">Identity & Era Verification</h3>
+          <p class="card-text">
+            SFace & ArcFace R50 embedding matching filters out secondary people and prevents identity drift across different ages or styling periods.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">📐</div>
+          <h3 class="card-title">Smart Krea 2 Bucket Fitting</h3>
+          <p class="card-text">
+            Calculates optimal safe crop frames matching exact aspect ratios (`512x512`, `512x768`, `768x1024`, etc.). Resizes down cleanly without stretching or upscaling.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🦴</div>
+          <h3 class="card-title">MediaPipe Joint Safety</h3>
+          <p class="card-text">
+            Detects 33 body keypoints. Ensures crop borders never slice through elbows, knees, wrists, or hair boundaries, keeping full anatomical integrity.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🎬</div>
+          <h3 class="card-title">Local Video Sampler</h3>
+          <p class="card-text">
+            Directly processes local `.mp4`, `.mov`, and `.mkv` files. Deduplicates similar frames and saves checkpoints in `video_progress.json` for seamless resume.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-icon">🖥️</div>
+          <h3 class="card-title">Tkinter Desktop GUI</h3>
+          <p class="card-text">
+            Includes a clean desktop application with interactive progress bars, doctor checks, threshold tweaks, and one-click model downloads.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pipeline Section -->
+  <section id="pipeline" class="pipeline-section">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Multi-Stage Curation Pipeline</h2>
+        <p class="section-desc">How Lora Face Select Lite transforms raw photos into dataset-ready crops.</p>
+      </div>
+
+      <div class="pipeline-steps">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h4>Raw Input & Video Frame Extraction</h4>
+            <p>Scans dataset folder for images and video clips. Decodes frames sequentially at 0.5 FPS with memory-capped top-K selection.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h4>Face Detection & Cosine Similarity Gate</h4>
+            <p>YuNet isolates face bounding boxes. SFace / ArcFace R50 extracts 512-d feature vectors to match against 1–5 reference images.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h4>BiSeNet Facial Feature Segmentation</h4>
+            <p>Generates detailed parsing masks for hair, skin, glasses, and headwear to calculate hair density and occlusion margins.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h4>MediaPipe Pose & NudeNet Safety Check</h4>
+            <p>Estimates 33 body keypoints. Checks hand/wrist boundaries and runs optional NudeNet ONNX model over the target body region.</p>
+          </div>
+        </div>
+
+        <div class="step-item">
+          <div class="step-num">5</div>
+          <div class="step-content">
+            <h4>Bucket Alignment & Interactive HTML Report</h4>
+            <p>Fits crop into nearest Krea bucket (`512, 768, 1024`). Generates `review.html`, `dataset_manifest.csv`, and `contact_sheet.jpg`.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Krea Aspect Ratio Calculator Widget -->
+  <section id="calculator" class="calculator-section">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Interactive Krea 2 Bucket Simulator</h2>
+        <p class="section-desc">See how crop aspect ratios are selected and scaled to match training buckets.</p>
+      </div>
+
+      <div class="calc-box">
+        <div class="calc-controls">
+          <div class="input-group">
+            <label>Crop Category</label>
+            <select id="cropTypeSelect" onchange="updateCalc()">
+              <option value="close">Close Portrait (Hair & Shoulders)</option>
+              <option value="medium" selected>Medium Shot (Upper Body)</option>
+              <option value="far">Far / Full Body Shot</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Target Aspect Ratio</label>
+            <select id="aspectSelect" onchange="updateCalc()">
+              <option value="portrait" selected>Portrait (2:3 — 512x768 / 768x1024)</option>
+              <option value="square">Square (1:1 — 512x512 / 768x768)</option>
+              <option value="landscape">Landscape (3:2 — 768x512 / 1024x768)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="calc-result">
+          <div class="calc-spec">
+            <span class="calc-spec-lbl">Selected Training Bucket</span>
+            <span class="calc-spec-val" id="resBucket">512 × 768 px</span>
+          </div>
+          <div class="calc-spec">
+            <span class="calc-spec-lbl">Aspect Ratio</span>
+            <span class="calc-spec-val" id="resRatio" style="color: var(--accent-secondary);">0.667 (2:3)</span>
+          </div>
+          <div class="calc-spec">
+            <span class="calc-spec-lbl">Upscale Guard</span>
+            <span class="calc-spec-val" style="color: var(--accent-emerald);">Active (100% Native)</span>
+          </div>
+          <div class="aspect-visualizer" id="aspectVisualizer">
+            512 × 768
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start Section -->
+  <section id="quickstart" class="features-section">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Quick Start Guide</h2>
+        <p class="section-desc">Get up and running in under 2 minutes on Windows or Linux.</p>
+      </div>
+
+      <div class="calc-box" style="max-width: 960px;">
+        <div class="terminal-header" style="border-radius: 8px 8px 0 0;">
+          <div class="terminal-title">Windows PowerShell Installation</div>
+        </div>
+        <div class="terminal-body" style="border-radius: 0 0 8px 8px;">
+          <div><span class="cmd-comment"># 1. Clone repository & set up environment</span></div>
+          <div><span class="cmd-prompt">PS&gt;</span> <span class="cmd-keyword">cd</span> F:\AI_project\lora_face_select_lite</div>
+          <div><span class="cmd-prompt">PS&gt;</span> <span class="cmd-keyword">py</span> -3.12 -m venv .venv-win</div>
+          <div><span class="cmd-prompt">PS&gt;</span> <span class="cmd-path">.\.venv-win\Scripts\Activate.ps1</span></div>
+
+          <br>
+          <div><span class="cmd-comment"># 2. Install dependencies & download pre-verified ONNX models</span></div>
+          <div><span class="cmd-prompt">PS&gt;</span> <span class="cmd-keyword">python</span> -m pip install -e ".[test]"</div>
+          <div><span class="cmd-prompt">PS&gt;</span> <span class="cmd-keyword">python</span> -m lora_face_select_lite download-models --profile stable</div>
+          <div><span class="cmd-prompt">PS&gt;</span> <span class="cmd-keyword">python</span> -m lora_face_select_lite doctor</div>
+
+          <br>
+          <div><span class="cmd-comment"># 3. Launch GUI or run CLI select command</span></div>
+          <div><span class="cmd-prompt">PS&gt;</span> <span class="cmd-keyword">python</span> -m lora_face_select_lite.gui <span class="cmd-comment"># Or double click run_gui.bat</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Output Artifacts Table -->
+  <section id="artifacts" class="pipeline-section">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Generated Dataset Artifacts</h2>
+        <p class="section-desc">Full auditability for every crop decision and safety check.</p>
+      </div>
+
+      <div class="calc-box" style="max-width: 960px; padding: 1.5rem;">
+        <table class="artifact-table">
+          <thead>
+            <tr>
+              <th>Artifact Path</th>
+              <th>Description & Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="file-name">prepared/</span></td>
+              <td>Ready-to-upload cropped images aligned to exact Krea buckets (`512, 768, 1024`).</td>
+            </tr>
+            <tr>
+              <td><span class="file-name">selected/</span></td>
+              <td>Unmodified original source files corresponding to approved crops.</td>
+            </tr>
+            <tr>
+              <td><span class="file-name">review.html</span></td>
+              <td>Interactive visual report with side-by-side comparison of original, crop, face parsing & pose keypoints.</td>
+            </tr>
+            <tr>
+              <td><span class="file-name">dataset_manifest.csv</span></td>
+              <td>Complete CSV with similarity score, focus target (`body` vs `identity`), pose confidence, and bounding box coordinates.</td>
+            </tr>
+            <tr>
+              <td><span class="file-name">crop_skipped/</span></td>
+              <td>Files where safe standard Krea crop was impossible, with exact diagnostic reason in `crop_skips.csv`.</td>
+            </tr>
+            <tr>
+              <td><span class="file-name">contact_sheet.jpg</span></td>
+              <td>Grid preview of all selected candidates for quick manual review.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p style="margin-bottom: 0.5rem;">
+        <strong>Lora Face Select Lite</strong> — Released under the <a href="https://opensource.org/licenses/MIT" target="_blank">MIT License</a>.
+      </p>
+      <p>CPU-First Face LoRA Dataset Curation • Built with Python, OpenCV DNN & ONNX Runtime</p>
+    </div>
+  </footer>
+
+  <script>
+    function updateCalc() {
+      const cropType = document.getElementById('cropTypeSelect').value;
+      const aspect = document.getElementById('aspectSelect').value;
+
+      const bucketEl = document.getElementById('resBucket');
+      const ratioEl = document.getElementById('resRatio');
+      const visualizer = document.getElementById('aspectVisualizer');
+
+      let bucketText = "512 × 768 px";
+      let ratioText = "0.667 (2:3)";
+      let w = 80;
+      let h = 120;
+
+      if (aspect === 'portrait') {
+        if (cropType === 'far') {
+          bucketText = "768 × 1024 px";
+          w = 84; h = 112;
+        } else {
+          bucketText = "512 × 768 px";
+          w = 70; h = 105;
+        }
+        ratioText = "0.667 (2:3)";
+      } else if (aspect === 'square') {
+        if (cropType === 'far') {
+          bucketText = "768 × 768 px";
+        } else {
+          bucketText = "512 × 512 px";
+        }
+        w = 90; h = 90;
+        ratioText = "1.000 (1:1)";
+      } else if (aspect === 'landscape') {
+        if (cropType === 'far') {
+          bucketText = "1024 × 768 px";
+          w = 112; h = 84;
+        } else {
+          bucketText = "768 × 512 px";
+          w = 105; h = 70;
+        }
+        ratioText = "1.500 (3:2)";
+      }
+
+      bucketEl.innerText = bucketText;
+      ratioEl.innerText = ratioText;
+      visualizer.style.width = w + 'px';
+      visualizer.style.height = h + 'px';
+      visualizer.innerText = bucketText;
+    }
+  </script>
+</body>
+</html>

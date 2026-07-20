@@ -1,0 +1,35 @@
+# Virtual Environments
+.venv*/
+venv/
+env/
+
+# Model Checkpoints (Heavy Binaries)
+models/*.onnx
+models/*.pt
+models/**/*.onnx
+models/**/*.pt
+
+# Python & Testing Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Local Output & Test Folders
+result*/
+Bkl4VID1/
+annaVID/
+_ort_run.py
+_ort_test.txt
+*.log
+
+# IDE & System
+.vscode/
+.idea/
+.commandcode/
+.DS_Store
+Thumbs.db
