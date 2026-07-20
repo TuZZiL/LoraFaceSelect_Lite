@@ -5,12 +5,23 @@ from typing import Any, Callable
 
 from .body_attributes import estimate_body_attributes
 from .io_utils import image_dimensions, read_image
-from .metrics import classify_lighting, classify_pose, classify_scale, cosine_similarity, image_hash, image_quality, normalized_mean_embedding
+from .metrics import (
+    classify_lighting,
+    classify_pose,
+    classify_scale,
+    cosine_similarity,
+    filter_outlier_indices,
+    image_hash,
+    image_quality,
+    normalized_mean_embedding,
+    quality_weighted_mean_embedding,
+)
 from .models import CandidateRecord
 
 
 def reference_embedding(reference_paths: list[Path], backend: Any, max_side: int = 960) -> Any:
     embeddings = []
+    qualities = []
     for path in reference_paths:
         image = read_image(path, max_side=max_side)
         if image is None:
@@ -19,11 +30,27 @@ def reference_embedding(reference_paths: list[Path], backend: Any, max_side: int
         if len(faces) != 1:
             raise ValueError(f"Reference must contain exactly one face: {path} (found {len(faces)})")
         embeddings.append(faces[0].embedding)
-    return normalized_mean_embedding(embeddings)
+        
+        # Calculate quality score for this reference face
+        original_size = image_dimensions(path) or (image.shape[1], image.shape[0])
+        resolution_scale = original_size[0] / max(1, image.shape[1])
+        raw = image_quality(image, faces[0].bbox, resolution_scale=resolution_scale)
+        blur_score = max(0.0, min(1.0, raw["blur_raw"] / 8.0))
+        exposure_score = max(0.0, min(1.0, raw["exposure_raw"]))
+        resolution_score = max(0.0, min(1.0, raw["resolution_raw"]))
+        margin_score = max(0.0, min(1.0, raw["margin_raw"]))
+        quality_score = 0.40 * blur_score + 0.25 * exposure_score + 0.20 * resolution_score + 0.15 * margin_score
+        qualities.append(quality_score)
+
+    keep_indices = filter_outlier_indices(embeddings)
+    filtered_embeddings = [embeddings[i] for i in keep_indices]
+    filtered_qualities = [qualities[i] for i in keep_indices]
+    return quality_weighted_mean_embedding(filtered_embeddings, filtered_qualities)
 
 
 def reference_appearance(reference_paths: list[Path], face_backend: Any, appearance_backend: Any, max_side: int = 960) -> tuple[Any, Any]:
     face_embeddings, head_embeddings = [], []
+    qualities = []
     for path in reference_paths:
         image = read_image(path, max_side=max_side)
         if image is None:
@@ -34,7 +61,26 @@ def reference_appearance(reference_paths: list[Path], face_backend: Any, appeara
         face_embedding, head_embedding = appearance_backend.embed(image, faces[0].bbox)
         face_embeddings.append(face_embedding)
         head_embeddings.append(head_embedding)
-    return normalized_mean_embedding(face_embeddings), normalized_mean_embedding(head_embeddings)
+        
+        # Calculate quality score for this reference face
+        original_size = image_dimensions(path) or (image.shape[1], image.shape[0])
+        resolution_scale = original_size[0] / max(1, image.shape[1])
+        raw = image_quality(image, faces[0].bbox, resolution_scale=resolution_scale)
+        blur_score = max(0.0, min(1.0, raw["blur_raw"] / 8.0))
+        exposure_score = max(0.0, min(1.0, raw["exposure_raw"]))
+        resolution_score = max(0.0, min(1.0, raw["resolution_raw"]))
+        margin_score = max(0.0, min(1.0, raw["margin_raw"]))
+        quality_score = 0.40 * blur_score + 0.25 * exposure_score + 0.20 * resolution_score + 0.15 * margin_score
+        qualities.append(quality_score)
+
+    keep_indices = filter_outlier_indices(face_embeddings)
+    filtered_face_embeddings = [face_embeddings[i] for i in keep_indices]
+    filtered_head_embeddings = [head_embeddings[i] for i in keep_indices]
+    filtered_qualities = [qualities[i] for i in keep_indices]
+    return (
+        quality_weighted_mean_embedding(filtered_face_embeddings, filtered_qualities),
+        quality_weighted_mean_embedding(filtered_head_embeddings, filtered_qualities),
+    )
 
 
 ProgressCallback = Callable[[int, int, Path], None]
@@ -101,7 +147,9 @@ def analyze_dataset(
         resolution_score = max(0.0, min(1.0, raw["resolution_raw"]))
         margin_score = max(0.0, min(1.0, raw["margin_raw"]))
         quality_score = 0.40 * blur_score + 0.25 * exposure_score + 0.20 * resolution_score + 0.15 * margin_score
-        similarity_ok = similarity >= min_similarity
+        yaw_abs = abs(target.yaw) if target.yaw is not None else 0.0
+        adaptive_threshold = min_similarity - 0.10 * min(1.0, yaw_abs / 45.0)
+        similarity_ok = similarity >= adaptive_threshold
         size_ok = face_width >= min_face_width and ratio >= 0.04
         pose_ok = max_abs_yaw is None or target.yaw is None or abs(target.yaw) <= max_abs_yaw
         # A weighted average alone can hide a catastrophically blurred or
@@ -112,7 +160,7 @@ def analyze_dataset(
             and blur_score >= min_quality * 0.25
             and exposure_score >= min_quality * 0.50
         )
-        candidate_analysis_ok = similarity >= min_similarity - 0.15 and size_ok and quality_ok and pose_ok
+        candidate_analysis_ok = similarity >= adaptive_threshold - 0.15 and size_ok and quality_ok and pose_ok
         if candidate_analysis_ok and appearance_identity is not None and appearance_backend is not None:
             try:
                 face_embedding, head_embedding = appearance_backend.embed(image, target.bbox)
@@ -198,7 +246,7 @@ def analyze_dataset(
                 "other_face_bboxes": other_face_bboxes,
             },
         )
-        record.fallback_eligible = quality_ok and size_ok and pose_ok and len(faces) == 1 and similarity >= min_similarity - 0.15
+        record.fallback_eligible = quality_ok and size_ok and pose_ok and len(faces) == 1 and similarity >= adaptive_threshold - 0.15
         target_guard = _expanded_bbox(target_bbox, 0.08)
         if record.eligible and any(_boxes_intersect(_expanded_bbox(other, 0.40), target_guard) for other in other_face_bboxes):
             record.status = "multiple_faces_review"

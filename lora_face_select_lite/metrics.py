@@ -33,6 +33,82 @@ def normalized_mean_embedding(embeddings: list[Any]) -> Any:
     return vector / norm
 
 
+def filter_outlier_indices(embeddings: list[Any], threshold: float = 0.60, min_keep: int = 2) -> list[int]:
+    """Identify indices of outlier embeddings.
+
+    Pairwise cosine similarity is used to find embeddings that are far from the
+    consensus. Outlier removal is only performed if we have >= 3 embeddings,
+    and we will never keep fewer than min_keep embeddings.
+    """
+    import numpy as np
+
+    n = len(embeddings)
+    if n < 3:
+        return list(range(n))
+
+    # Calculate pairwise similarity matrix
+    sims = np.zeros((n, n), dtype=np.float32)
+    for i in range(n):
+        for j in range(i, n):
+            if i == j:
+                sims[i, j] = 1.0
+            else:
+                sim = cosine_similarity(embeddings[i], embeddings[j])
+                sims[i, j] = sim
+                sims[j, i] = sim
+
+    # For each embedding, compute its mean similarity to all other embeddings
+    mean_sims = []
+    for i in range(n):
+        other_sims = [sims[i, j] for j in range(n) if j != i]
+        mean_sims.append(float(np.mean(other_sims)))
+
+    # Median similarity of the consensus
+    median_sim = float(np.median(mean_sims))
+
+    # Sort indices by mean similarity (descending - best consensus first)
+    sorted_indices = sorted(range(n), key=lambda idx: mean_sims[idx], reverse=True)
+
+    # Identify non-outliers. We always keep the top `min_keep` regardless of score.
+    keep_indices = set(sorted_indices[:min_keep])
+    for idx in sorted_indices[min_keep:]:
+        # If mean similarity to others is too low, we drop it
+        if mean_sims[idx] >= threshold and mean_sims[idx] >= (median_sim - 0.15):
+            keep_indices.add(idx)
+
+    return sorted(list(keep_indices))
+
+
+def quality_weighted_mean_embedding(embeddings: list[Any], qualities: list[float]) -> Any:
+    """Compute a quality-weighted mean of embeddings and normalize the result."""
+    import numpy as np
+
+    if not embeddings:
+        raise ValueError("At least one embedding is required")
+    if len(embeddings) != len(qualities):
+        raise ValueError("Embeddings and qualities lists must have the same length")
+
+    vectors = [np.asarray(item, dtype=np.float32).reshape(-1) for item in embeddings]
+    dimensions = {vector.size for vector in vectors}
+    if len(dimensions) != 1:
+        raise ValueError("Embeddings must have the same size")
+
+    # Ensure all qualities are positive and non-zero
+    weights = np.asarray([max(0.01, float(q)) for q in qualities], dtype=np.float32)
+    weights /= weights.sum()
+
+    # Compute quality-weighted mean
+    vector = np.sum([v * w for v, w in zip(vectors, weights)], axis=0)
+    norm = np.linalg.norm(vector)
+    if norm == 0:
+        # Fallback if somehow it cancels out
+        vector = np.mean(vectors, axis=0)
+        norm = np.linalg.norm(vector)
+        if norm == 0:
+            raise ValueError("Embeddings cannot average to zero")
+    return vector / norm
+
+
 def classify_scale(face_width_ratio: float) -> str:
     if face_width_ratio >= 0.22:
         return "close"

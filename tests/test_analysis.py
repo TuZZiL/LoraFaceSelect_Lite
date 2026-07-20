@@ -192,3 +192,109 @@ def test_analysis_runs_nudenet_only_on_matched_target_body_roi(monkeypatch, tmp_
     assert record.nudenet_labels == "belly-covered"
     assert record.nudenet_max_score == 0.8
     assert record.nudenet_error is None
+
+
+def test_reference_embedding_outlier_filtering(monkeypatch, tmp_path: Path) -> None:
+    paths = [tmp_path / "ref1.jpg", tmp_path / "ref2.jpg", tmp_path / "ref3.jpg"]
+    for p in paths:
+        p.write_bytes(b"")
+
+    def mock_read_image(path: Path, max_side: int = 960) -> np.ndarray:
+        idx = paths.index(path) + 1
+        img = np.ones((160, 160, 3), dtype=np.uint8) * idx
+        return img
+
+    monkeypatch.setattr(analysis, "read_image", mock_read_image)
+    monkeypatch.setattr(analysis, "image_dimensions", lambda path: (160, 160))
+
+    class MockBackend:
+        def analyze(self, image: np.ndarray) -> list[FaceObservation]:
+            idx = image[0, 0, 0]
+            if idx == 1:
+                emb = [1.0, 0.0]
+            elif idx == 2:
+                emb = [0.95, 0.1]
+            else:
+                emb = [0.0, 1.0]
+            return [FaceObservation(
+                embedding=np.asarray(emb, dtype=np.float32),
+                bbox=(30, 30, 130, 130),
+                detection_score=0.95,
+                yaw=0,
+                pitch=0,
+            )]
+
+    ref_emb = analysis.reference_embedding(paths, MockBackend())
+    expected = np.array([1.0, 0.0]) + np.array([0.95, 0.1])
+    expected = expected / np.linalg.norm(expected)
+    assert np.allclose(ref_emb, expected, atol=1e-4)
+
+
+def test_reference_embedding_quality_weighting(monkeypatch, tmp_path: Path) -> None:
+    paths = [tmp_path / "blurry.jpg", tmp_path / "sharp.jpg"]
+    paths[0].write_bytes(b"")
+    paths[1].write_bytes(b"")
+
+    def mock_read_image(path: Path, max_side: int = 960) -> np.ndarray:
+        if "blurry" in path.name:
+            return np.zeros((160, 160, 3), dtype=np.uint8)
+        else:
+            grid = np.where(np.indices((160, 160)).sum(axis=0) % 2, 224, 32).astype(np.uint8)
+            return np.repeat(grid[:, :, None], 3, axis=2)
+
+    monkeypatch.setattr(analysis, "read_image", mock_read_image)
+    monkeypatch.setattr(analysis, "image_dimensions", lambda path: (160, 160))
+
+    class MockBackend:
+        def analyze(self, image: np.ndarray) -> list[FaceObservation]:
+            is_sharp = image.mean() > 5.0
+            emb = [0.0, 1.0] if is_sharp else [1.0, 0.0]
+            return [FaceObservation(
+                embedding=np.asarray(emb, dtype=np.float32),
+                bbox=(30, 30, 130, 130),
+                detection_score=0.95,
+                yaw=0,
+                pitch=0,
+            )]
+
+    ref_emb = analysis.reference_embedding(paths, MockBackend())
+    assert ref_emb[1] > ref_emb[0]
+
+
+def test_pose_adaptive_similarity_thresholding(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(analysis, "read_image", lambda path, max_side: _sharp_image())
+    identity = np.asarray([1.0, 0.0], dtype=np.float32)
+
+    face_frontal = _face([0.50, np.sqrt(1 - 0.50**2)])
+    face_frontal.yaw = 0.0
+    records_frontal = analysis.analyze_dataset(
+        [tmp_path / "frontal.jpg"],
+        identity,
+        StaticBackend([face_frontal]),
+        min_similarity=0.55,
+        max_abs_yaw=50.0,
+    )
+
+    face_profile = _face([0.50, np.sqrt(1 - 0.50**2)])
+    face_profile.yaw = 45.0
+    records_profile = analysis.analyze_dataset(
+        [tmp_path / "profile.jpg"],
+        identity,
+        StaticBackend([face_profile]),
+        min_similarity=0.55,
+        max_abs_yaw=50.0,
+    )
+
+    face_profile_low = _face([0.35, np.sqrt(1 - 0.35**2)])
+    face_profile_low.yaw = 45.0
+    records_profile_low = analysis.analyze_dataset(
+        [tmp_path / "profile_low.jpg"],
+        identity,
+        StaticBackend([face_profile_low]),
+        min_similarity=0.55,
+        max_abs_yaw=50.0,
+    )
+
+    assert records_frontal[0].status == "rejected"
+    assert records_profile[0].status == "eligible"
+    assert records_profile_low[0].status == "rejected"
