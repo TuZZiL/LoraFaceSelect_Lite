@@ -8,6 +8,8 @@ models/*.onnx
 models/*.pt
 models/**/*.onnx
 models/**/*.pt
+models/**/*.gguf
+tools/llama.cpp/
 
 # Python & Testing Artifacts
 __pycache__/
@@ -21,6 +23,8 @@ build/
 
 # Local Output & Test Folders
 result*/
+176/
+176_ready/
 Bkl4VID1/
 annaVID/
 _ort_run.py

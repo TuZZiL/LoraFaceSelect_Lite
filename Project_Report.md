@@ -63,4 +63,23 @@
 - done: Додано юніт-тест для перевірки `body_crop_far` стратегії, всі 74 тести успішно пройшли.
 - done: Завантажено та верифіковано опціональну сумісну модель MobileCLIP-S0 ONNX з репозиторію `plhery/mobileclip2-onnx` на Hugging Face (попередня S2 модель падала в OpenCV DNN на кроці shape inference).
 
+## 2026-07-23
 
+- context: Потрібна пакетна підготовка 176 різноперсонажних фото для Krea 2 style LoRA.
+- done: Додано standalone CLI для JPEG, мінімального crop до exact buckets зі сторонами 512/768/1024, без upscale та з CSV manifest.
+- context: За уточненням користувача output обмежено 9 комбінаціями сторін 512/768/1024.
+- done: Smart crop використовує локальні MediaPipe person+pose models, зсуває crop до visible body landmarks; center fallback збережено.
+
+## 2026-07-26
+
+- done: Додано standalone Tkinter GUI для Krea 2 style dataset CLI без нових dependencies і дублювання pipeline.
+- done: GUI має folder pickers, 9 bucket toggles, quality, smart crop, determinate progress, live log, cancel і open output.
+- done: Додано `run_krea2_style_gui.bat`; partial success зі skipped images та cancel мають окремі стани.
+- done: Локально встановлено `llama.cpp b10107` CUDA 12 у `tools/llama.cpp/b10107`; global PATH/system не змінено.
+- done: Qwen3.5-2B Aggressive Q4_K_M і vision mmproj розміщено в `models/qwen3.5-caption`; SHA-256 збігаються з Hugging Face LFS.
+- done: Підготовка dataset опціонально генерує prompt-driven UTF-8 `.txt` captions для фінальних crops; manifest містить caption/status/error.
+- done: GUI має AI caption toggle, prompt і max tokens; loading/caption/error/cancel states оброблені.
+- resolved: `llama-server` працює лише на localhost із per-run API key і disabled Web UI; cancel завершує весь process tree.
+- done: Real Qwen vision smoke і end-to-end crop→caption→sidecar→manifest успішні; model load ~2.9 s, caption ~1.1 s.
+- resolved: Caption prompt більше не блокується вимкненим toggle; додано Ctrl+V/Ctrl+A і right-click Cut/Copy/Paste/Select all.
+- done: Повний suite — 85 passed; compile, diff check, visual critique clean; orphan server processes — 0.

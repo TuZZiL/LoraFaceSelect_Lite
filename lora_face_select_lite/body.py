@@ -123,6 +123,19 @@ class MediaPipeBodyBackend:
         bbox, landmarks, mask, confidence = result
         return BodyObservation(tuple(map(float, bbox)), landmarks[:33], mask, confidence, float(person[-1]))
 
+    def analyze_all(self, image: Any) -> list[BodyObservation]:
+        """Return pose observations for every detected person."""
+        observations = []
+        for person in self._detect(image):
+            result = self._estimate_pose(image, person)
+            if result is None:
+                continue
+            bbox, landmarks, mask, confidence = result
+            observations.append(
+                BodyObservation(tuple(map(float, bbox)), landmarks[:33], mask, confidence, float(person[-1]))
+            )
+        return observations
+
     def _estimate_pose(self, image: Any, person: Any) -> tuple[Any, Any, Any, float] | None:
         import cv2
         import numpy as np
