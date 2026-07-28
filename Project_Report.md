@@ -83,3 +83,24 @@
 - done: Real Qwen vision smoke і end-to-end crop→caption→sidecar→manifest успішні; model load ~2.9 s, caption ~1.1 s.
 - resolved: Caption prompt більше не блокується вимкненим toggle; додано Ctrl+V/Ctrl+A і right-click Cut/Copy/Paste/Select all.
 - done: Повний suite — 85 passed; compile, diff check, visual critique clean; orphan server processes — 0.
+
+## 2026-07-29
+
+- context: Планова фіча — pose-balanced selection для однієї людини з великої галереї ( кейс: 627 фото → знайти ~24 фото з розподілом ракурсів Krea 2: front 40–45%, three-quarter 30–35%, profile 15–20%, other 5–10%).
+- context: Узгоджено identity = автоматично найбільший face-cluster (union-find over SFace embeddings), reference-фото не потрібні; yaw-гейт авто-релакс до 60° при увімкненій pose-квоті.
+- done: Код і звіт за 2026-07-23/26 (Krea 2 style CLI/GUI, Qwen captions) закомічено та запушено на GitHub (`524e730`); `.gitignore` доповнено `.gguf`, `tools/llama.cpp/`, numeric dataset folders.
+- context: Публічного ONNX для 6DRepNet не знайдено: PINTO wasabi tarball (5.1 GB) обривається, HF `23cc745927/6DRepNet` — private, `osanseviero` містить лише .pth (150 MB), litert-community — лише .tflite.
+- context: MiVOLO офіційно не експортується в ONNX (col2im ламає torch.onnx.export, upstream issue #14); TorchScript потребує PyTorch у venv.
+- resolved: Рішення — 6DRepNet інтегруємо після ручного пошуку/конвертації моделі користувачем; MiVOLO відкладено (можливий TorchScript-плагін пізніше).
+
+### TODO (наступна сесія): pose-balanced selection
+
+1. **Моделі (шукає користувач / конвертуємо):**
+   - `models/6drepnet_300w_lp_aflw2000_224x224.onnx` — Head-pose (yaw/pitch/roll), input 1×3×224×224, output 1×6 (6D rotation). Джерела: конвертація з `osanseviero/6DRepNet_300W_LP_AFLW2000` (model.pth ~150 MB, HF) через thohemp/6DRepNet `SixDRepNet(backbone_name='RepVGG-B1g2', deploy=True)` + `torch.onnx.export`; або завантажити готовий ONNX якщо з'явиться публічний.
+   - (опційно, пізніше) MiVOLO age/gender: `iitolstykh/mivolo_v2` safetensors 115 MB → TorchScript, потребує torch.
+2. **Identity clustering:** union-find over SFace embeddings всіх detected faces (cosine threshold ~0.35), вибір найбільшого кластера як auto-reference; новий модуль `identity.py`.
+3. **Точний pose:** backend-клас `SixDRepNetBackend` (cv2.dnn або ORT-fallback), заміна coarse `_pose_from_landmarks` де доступна модель; bins: frontal ≤15°, three-quarter 15–40°, profile ≥40°, other (extreme pitch/roll).
+4. **Pose quota у `selection.py`:** патерн як `body_target` — цільові частки per pose bin, soft-deficit bonus при greedy pick, перекидання незаповнених слотів; поріг quality-floor для profile.
+5. **CLI/GUI:** `--pose-quota front,tq,profile,other` (дефолт `45,32,18,5`), `--max-abs-yaw` авто-релакс до 60° коли квота активна; toggle у GUI.
+6. **Тести:** unit на clustering, quota distribution, fallback; regression щоб не було видно незаповненої квоти без релаксу.
+7. **Звичайний фінал:** оновити звіт/README, повний suite, smoke на реальних фото, commit+push.
